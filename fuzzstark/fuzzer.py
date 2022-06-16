@@ -8,6 +8,7 @@ import sys
 import argparse
 import logging
 import time
+import signal
 from typing import Dict, List, Set
 from starkware.starknet.compiler.compile import compile_starknet_files
 from starkware.starknet.services.api.contract_class import ContractClass
@@ -83,6 +84,8 @@ class Fuzzer:
         """
 
         hook()
+        signal.signal(signal.SIGINT, self.handler_output_coverage)
+
         self.contract_class = compile_starknet_files(
             [self.config.filename],
             cairo_path=self.config.cairo_path,
@@ -103,8 +106,7 @@ class Fuzzer:
         if len(self.property_functions) == 0:
             logging.info("All properties have been violated")
 
-        if self.config.coverage:
-            self.output_coverage()
+        self.output_coverage()
 
     async def _deploy(self) -> None:
         """
@@ -171,6 +173,9 @@ class Fuzzer:
         Output coverage to a file
         """
 
+        if not self.config.coverage:
+            return
+
         file_to_code: Dict[str, List[str]] = {}
 
         for pc in self.coverage:
@@ -200,6 +205,18 @@ class Fuzzer:
             for filename, code in file_to_code.items():
                 f.write(f"\n{filename}\n")
                 f.write("".join(code))
+
+    def handler_output_coverage(self, signum, frame) -> None:  # type: ignore # pylint: disable=unused-argument
+        """
+        Handler for signal.SIGINT to output the coverage file
+
+        Args:
+            signum: Not used
+            frame: Not used
+        """
+
+        self.output_coverage()
+        sys.exit(1)
 
 
 async def main() -> None:
