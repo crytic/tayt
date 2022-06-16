@@ -1,6 +1,5 @@
 from collections import namedtuple
 import os
-import asyncio
 import sys
 import argparse
 import logging
@@ -218,5 +217,4 @@ async def main():
     await fuzzer.start()
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+
