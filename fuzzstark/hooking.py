@@ -43,6 +43,7 @@ def _hooked_build_call_info(
 
     return call_info_pc
 
+
 # Call _build_call_info with the trace argument
 def _hooked_sync_execute(
     self,
