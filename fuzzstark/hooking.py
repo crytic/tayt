@@ -1,9 +1,18 @@
+"""
+Helper module to get coverage
+"""
+
 from typing import List, Set
 from dataclasses import make_dataclass
 import asyncio
 from starkware.cairo.lang.vm.cairo_pie import ExecutionResources
+from starkware.starknet.business_logic.internal_transaction_interface import StarknetGeneralConfig
 from starkware.starknet.core.os import syscall_utils
-from starkware.starknet.business_logic.execution.objects import CallInfo
+from starkware.starknet.business_logic.execution.objects import (
+    CallInfo,
+    TransactionExecutionContext,
+)
+from starkware.starknet.business_logic.state.state import CarriedState
 from starkware.cairo.lang.vm.trace_entry import TraceEntry
 from starkware.cairo.lang.vm.relocatable import MaybeRelocatable
 from starkware.starknet.business_logic.execution.execute_entry_point import ExecuteEntryPoint
@@ -11,9 +20,11 @@ from starkware.starknet.business_logic.utils import get_return_values
 
 CallInfoPc = make_dataclass("CallInfoPc", fields=[("pc", Set[int])], bases=(CallInfo,), frozen=True)
 
+# pylint: disable=protected-access
+
 # We make _build_call_info returns a CallInfoPc that has a list of PCs executed
 def _hooked_build_call_info(
-    self,
+    self: ExecuteEntryPoint,
     previous_cairo_usage: ExecutionResources,
     syscall_handler: syscall_utils.BusinessLogicSysCallHandler,
     retdata: List[int],
@@ -46,11 +57,11 @@ def _hooked_build_call_info(
 
 # Call _build_call_info with the trace argument
 def _hooked_sync_execute(
-    self,
-    state: "CarriedState",
-    general_config: "StarknetGeneralConfig",
+    self: ExecuteEntryPoint,
+    state: CarriedState,
+    general_config: StarknetGeneralConfig,
     loop: asyncio.AbstractEventLoop,
-    tx_execution_context: "TransactionExecutionContext",
+    tx_execution_context: TransactionExecutionContext,
 ) -> CallInfo:
 
     previous_cairo_usage = state.cairo_usage
@@ -83,6 +94,10 @@ def _hooked_sync_execute(
     )
 
 
-def hook():
+def hook() -> None:
+    """
+    Hook _build_call_info and sync_execute to have a list of PCs executed in a transaction
+    """
+
     ExecuteEntryPoint._build_call_info = _hooked_build_call_info
     ExecuteEntryPoint.sync_execute = _hooked_sync_execute

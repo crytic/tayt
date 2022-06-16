@@ -1,3 +1,7 @@
+"""
+Fuzzer main module
+"""
+
 from collections import namedtuple
 import os
 import sys
@@ -6,6 +10,7 @@ import logging
 import time
 from typing import Dict, List, Set
 from starkware.starknet.compiler.compile import compile_starknet_files
+from starkware.starknet.services.api.contract_class import ContractClass
 from starkware.starknet.testing.state import StarknetState
 from starkware.starknet.testing.contract_utils import parse_arguments, StructManager, EventManager
 from starkware.starkware_utils.error_handling import StarkException
@@ -21,9 +26,20 @@ FuzzerConfig = namedtuple(
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-
+# pylint: disable=too-many-instance-attributes
 class Fuzzer:
-    def __init__(self, args) -> None:
+    """
+    Fuzzer class, set up the fuzzer environment
+    """
+
+    def __init__(self, args) -> None:  # type: ignore
+        """
+        Init the object
+
+        Args:
+            args: Command line options
+        """
+
         filename = args.filename
 
         if not os.path.isabs(filename):
@@ -45,7 +61,7 @@ class Fuzzer:
         )
         self.generator = TxGenerator(self)
         self.workers: List[FuzzerWorker] = []
-        self.state = None
+        self.state: StarknetState = None
         # List of contract functions name that represent properties to be tested
         # Read only functions that start with fuzz_ and return one felt variable
         # The functions return 1 if the property is not violated otherwise 0
@@ -54,14 +70,18 @@ class Fuzzer:
         # These are the functions to create a sequence of transactions to test
         self.external_functions: List[ExternalFunction] = []
         self.deployed_contract_address: int
-        self.contract_class: int
+        self.contract_class: ContractClass
         # TODO we could avoid these two helper class and do it manually
         self.struct_manager: StructManager = None
         self.event_manager: EventManager = None
         # For now we only keep track of the PCs executed
         self.coverage: Set[int] = set()
 
-    async def start(self):
+    async def start(self) -> None:
+        """
+        Start the fuzzer
+        """
+
         hook()
         self.contract_class = compile_starknet_files(
             [self.config.filename],
@@ -86,7 +106,11 @@ class Fuzzer:
         if self.config.coverage:
             self.output_coverage()
 
-    async def _deploy(self):
+    async def _deploy(self) -> None:
+        """
+        Deploy the contract under test and parse the abi to get properties and external functions
+        """
+
         for item in self.contract_class.abi:
             if item["type"] == "constructor":
                 if len(item["inputs"]) != 0:
@@ -142,8 +166,12 @@ class Fuzzer:
         for external_function in self.external_functions:
             logging.info(f"\t{external_function.name}")
 
-    def output_coverage(self):
-        file_to_code: Dict[str, str] = {}
+    def output_coverage(self) -> None:
+        """
+        Output coverage to a file
+        """
+
+        file_to_code: Dict[str, List[str]] = {}
 
         for pc in self.coverage:
             all_locations = self.contract_class.program.debug_info.instruction_locations[
@@ -159,7 +187,7 @@ class Fuzzer:
                 if filename not in file_to_code:
                     if filename.startswith("autogen/"):
                         continue
-                    with open(filename) as f:
+                    with open(filename, "r", encoding="utf8") as f:
                         file_to_code[filename] = f.readlines()
 
                 coverage_code = file_to_code[filename]
@@ -167,14 +195,18 @@ class Fuzzer:
                     if not coverage_code[line].startswith("*"):
                         coverage_code[line] = f"*{coverage_code[line]}"
 
-        with open(f"covered.{int(time.time())}.txt", "w") as f:
+        with open(f"covered.{int(time.time())}.txt", "w", encoding="utf8") as f:
             logging.info(f"Coverage in {f.name}")
             for filename, code in file_to_code.items():
                 f.write(f"\n{filename}\n")
                 f.write("".join(code))
 
 
-async def main():
+async def main() -> None:
+    """
+    Parse cli options and start the fuzzer
+    """
+
     parser = argparse.ArgumentParser(description="StarkNet smart contract fuzzer.")
     parser.add_argument("filename", type=str, help="Cairo file to analyze.")
     parser.add_argument(
@@ -215,6 +247,3 @@ async def main():
 
     fuzzer = Fuzzer(args)
     await fuzzer.start()
-
-
-

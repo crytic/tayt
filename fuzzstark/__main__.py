@@ -1,3 +1,7 @@
+"""
+Main module
+"""
+
 import asyncio
 import fuzzstark
 

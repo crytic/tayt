@@ -1,8 +1,13 @@
+"""
+Module containig a FuzzerWorker
+"""
+
 from collections import namedtuple
 import logging
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 from starkware.starknet.testing.state import StarknetState
 from starkware.starkware_utils.error_handling import StarkException
+from starkware.starknet.business_logic.execution.objects import Event
 
 if TYPE_CHECKING:
     from fuzzer import Fuzzer
@@ -13,15 +18,23 @@ TxSequenceElement = namedtuple(
     ["sender", "function_name", "arguments", "entry_point_type", "nonce", "events_emitted"],
 )
 
-
+# pylint: disable=too-few-public-methods, protected-access
 class FuzzerWorker:
+    """
+    Execute the transactions and check for possible violated properties
+    """
+
     def __init__(self, fuzzer: "Fuzzer", worker_index: int):
         self.fuzzer = fuzzer
         self.worker_index = worker_index
         # State refresh every run
         self.state: StarknetState = None
 
-    async def fuzz(self):
+    async def fuzz(self) -> None:
+        """
+        Start fuzzing
+        """
+
         while 1:
             if len(self.fuzzer.property_functions) == 0:
                 break
@@ -29,7 +42,7 @@ class FuzzerWorker:
             self.state = self.fuzzer.state.copy()
             transactions, violated = await self._test_tx_sequence()
 
-            if transactions is not None:
+            if transactions is not None and violated is not None:
                 for property_violated in violated:
                     logging.info(f"[!] {property_violated[0]} violated")
                     for event in property_violated[1]:
@@ -45,11 +58,17 @@ class FuzzerWorker:
                             f"\t E {self.fuzzer.event_manager._get_event_name(event.keys[0])}{event.data}"
                         )
 
-    async def _check_violated_property_tests(self) -> List[Tuple[str, Any]]:
+    async def _check_violated_property_tests(self) -> List[Tuple[str, List[Event]]]:
+        """
+        Check for possible violated properties after every transaction
+
+        Returns:
+            List[Tuple[str, List[Event]]]: List of violated properties with emitted events
+        """
+
         violated = []
 
         for property_function in self.fuzzer.property_functions:
-            # We assume that property functions don't raise exceptions so no try/except
             call_info = await self.state.call_raw(
                 self.fuzzer.deployed_contract_address,
                 property_function,
@@ -69,9 +88,12 @@ class FuzzerWorker:
 
     async def _test_tx_sequence(
         self,
-    ) -> Tuple[Optional[List[TxSequenceElement]], Optional[List[Tuple[str, Any]]]]:
+    ) -> Tuple[Optional[List[TxSequenceElement]], Optional[List[Tuple[str, List[Event]]]]]:
         """
-        Test a sequence of transactions and returns if some properties are violated
+        Test a sequence of transactions and returns the violated properties with the sequence of transactions
+
+        Returns:
+            Tuple[Optional[List[TxSequenceElement]], Optional[List[Tuple[str, List[Event]]]]]: (sequence of transactions, violated properties)
         """
 
         transactions: List[TxSequenceElement] = []
