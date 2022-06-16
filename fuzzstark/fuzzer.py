@@ -14,9 +14,9 @@ from starkware.starknet.services.api.contract_class import ContractClass
 from starkware.starknet.testing.state import StarknetState
 from starkware.starknet.testing.contract_utils import parse_arguments, StructManager, EventManager
 from starkware.starkware_utils.error_handling import StarkException
-from generator import TxGenerator
-from hooking import hook
-from fuzzer_worker import FuzzerWorker
+from fuzzstark.generator import TxGenerator
+from fuzzstark.hooking import hook
+from fuzzstark.fuzzer_worker import FuzzerWorker
 
 ExternalFunction = namedtuple("ExternalFunction", ["name", "arguments_type", "type"])
 FuzzerConfig = namedtuple(
