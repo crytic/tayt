@@ -5,7 +5,7 @@ TBD is a StarkNet smart contract fuzzer.
 ## Usage
 ### Writing invariants
 
-Invariants are StarkNet view functions with names that begin with `fuzz_`, have no arguments, and return a felt. An invarinat is considered failed when it returns 0.
+Invariants are StarkNet view functions with names that begin with `fuzz_`, have no arguments, and return a felt. An invariant is considered failed when it returns 0.
 
 ```cairo
 @view
