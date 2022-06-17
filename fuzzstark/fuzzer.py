@@ -196,7 +196,7 @@ class Fuzzer:
                         file_to_code[filename] = f.readlines()
 
                 coverage_code = file_to_code[filename]
-                for line in range(l[1], l[2] + 1):
+                for line in range(l[1] - 1, l[2]):
                     if not coverage_code[line].startswith("*"):
                         coverage_code[line] = f"*{coverage_code[line]}"
 
