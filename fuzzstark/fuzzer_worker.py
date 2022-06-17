@@ -7,7 +7,6 @@ import logging
 from typing import TYPE_CHECKING, List, Optional, Tuple
 from starkware.starknet.testing.state import StarknetState
 from starkware.starkware_utils.error_handling import StarkException
-from starkware.starknet.business_logic.execution.objects import Event
 
 if TYPE_CHECKING:
     from fuzzer import Fuzzer
@@ -17,6 +16,7 @@ TxSequenceElement = namedtuple(
     "TxSequenceElement",
     ["sender", "function_name", "arguments", "entry_point_type", "nonce", "events_emitted"],
 )
+ViolatedProperty = namedtuple("ViolatedProperty", ["name", "events_emitted"])
 
 # pylint: disable=too-few-public-methods, protected-access
 class FuzzerWorker:
@@ -39,10 +39,11 @@ class FuzzerWorker:
             if len(self.fuzzer.property_functions) == 0:
                 break
 
-            self.state = self.fuzzer.state.copy()
             transactions, violated = await self._test_tx_sequence()
 
             if transactions is not None and violated is not None:
+                if not self.fuzzer.config.no_shrink:
+                    transactions = await self._shrink_tx_sequence(transactions, violated)
                 for property_violated in violated:
                     logging.info(f"[!] {property_violated[0]} violated")
                     for event in property_violated[1]:
@@ -58,7 +59,7 @@ class FuzzerWorker:
                             f"\t E {self.fuzzer.event_manager._get_event_name(event.keys[0])}{event.data}"
                         )
 
-    async def _check_violated_property_tests(self) -> List[Tuple[str, List[Event]]]:
+    async def _check_violated_property_tests(self) -> List[ViolatedProperty]:
         """
         Check for possible violated properties after every transaction
 
@@ -81,20 +82,26 @@ class FuzzerWorker:
 
             # Property violated
             if call_info.retdata == [0]:
-                self.fuzzer.property_functions.remove(property_function)
-                violated.append((property_function, call_info.get_sorted_events()))
+                # If we don't have to shrink the sequence we have to remove  the property
+                # otherwise we remove it in _shrink_tx_sequence
+                if self.fuzzer.config.no_shrink:
+                    self.fuzzer.property_functions.remove(property_function)
+                violated.append(ViolatedProperty(property_function, call_info.get_sorted_events()))
 
         return violated
 
     async def _test_tx_sequence(
         self,
-    ) -> Tuple[Optional[List[TxSequenceElement]], Optional[List[Tuple[str, List[Event]]]]]:
+    ) -> Tuple[Optional[List[TxSequenceElement]], Optional[List[ViolatedProperty]]]:
         """
         Test a sequence of transactions and returns the violated properties with the sequence of transactions
 
         Returns:
-            Tuple[Optional[List[TxSequenceElement]], Optional[List[Tuple[str, List[Event]]]]]: (sequence of transactions, violated properties)
+            Tuple[Optional[List[TxSequenceElement]], Optional[List[ViolatedProperty]]]: (sequence of transactions, violated properties)
         """
+
+        # Reset the state when testing a new sequence
+        self.state = self.fuzzer.state.copy()
 
         transactions: List[TxSequenceElement] = []
 
@@ -136,3 +143,58 @@ class FuzzerWorker:
                 continue
 
         return None, None
+
+    async def _shrink_tx_sequence(
+        self, transactions: List[TxSequenceElement], properties_violated: List[ViolatedProperty]
+    ) -> List[TxSequenceElement]:
+        """
+        Attempts to shrink the provided transaction sequence by removing redundant transactions
+
+        Args:
+            transactions (List[TxSequenceElement]): Provided sequence of transactions
+            properties_violated (List[ViolatedProperty]): List of properties violated by the provided sequence of transactions
+
+        Returns:
+            List[TxSequenceElement]: The optimized sequence of transactions
+        """
+
+        shrinked_sequence: List[TxSequenceElement] = transactions
+
+        i = 0
+        while i < len(shrinked_sequence):
+            # Create a sequence without the item at index i
+            test_sequence: List[TxSequenceElement] = (
+                shrinked_sequence[:i] + shrinked_sequence[i + 1 :]
+            )
+
+            # Reset the state when testing a new sequence
+            self.state = self.fuzzer.state.copy()
+
+            for transaction in test_sequence:
+                try:
+                    await self.state.invoke_raw(
+                        self.fuzzer.deployed_contract_address,
+                        transaction.function_name,
+                        transaction.arguments,
+                        transaction.sender,
+                        0,
+                        entry_point_type=transaction.entry_point_type,
+                        nonce=transaction.nonce,
+                    )
+                except StarkException:
+                    continue
+
+            violated = await self._check_violated_property_tests()
+
+            # If we violate the expected amount of properties remove in the next iteration the same index
+            # since the item at that index will be new
+            if len(violated) == len(properties_violated):
+                shrinked_sequence = test_sequence
+                continue
+
+            i += 1
+
+        for p in properties_violated:
+            # We remove the peoperties violated from this sequence
+            self.fuzzer.property_functions.remove(p.name)
+        return shrinked_sequence

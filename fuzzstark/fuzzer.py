@@ -22,7 +22,16 @@ from fuzzstark.fuzzer_worker import FuzzerWorker
 ExternalFunction = namedtuple("ExternalFunction", ["name", "arguments_type", "type"])
 FuzzerConfig = namedtuple(
     "FuzzerConfig",
-    ["filename", "psender", "sender", "blacklist_function", "seq_len", "cairo_path", "coverage"],
+    [
+        "filename",
+        "psender",
+        "sender",
+        "blacklist_function",
+        "seq_len",
+        "cairo_path",
+        "coverage",
+        "no_shrink",
+    ],
 )
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -59,6 +68,7 @@ class Fuzzer:
             args.seq_len,
             args.cairo_path,
             args.coverage,
+            args.no_shrink,
         )
         self.generator = TxGenerator(self)
         self.workers: List[FuzzerWorker] = []
@@ -260,6 +270,9 @@ async def main() -> None:
         default=[],
     )
     parser.add_argument("--coverage", action="store_true", help="Output a coverage file.")
+    parser.add_argument(
+        "--no-shrink", action="store_true", help="Avoid shrinking failing sequences."
+    )
     args = parser.parse_args()
 
     fuzzer = Fuzzer(args)
