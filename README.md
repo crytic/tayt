@@ -1,12 +1,12 @@
-# TBD
+# Tayt
 
-TBD is a StarkNet smart contract fuzzer.
+Tayt is a StarkNet smart contract fuzzer.
 
 ## Installation
 
 We recommend using a Python [`virtual environment`](https://docs.python.org/3/library/venv.html).
 ```bash
-git clone https://github.com/crytic/fuzzstark.git && cd fuzzstark
+git clone https://github.com/crytic/tayt.git && cd tayt
 python setup.py install
 ```
 If you don't have cairo-lang already installed and you are on MacOS you may have an error about a missing gmp.h file even if you executed `brew install gmp`.
@@ -20,7 +20,7 @@ If the above command doesn't work you can find more solutions [`here`](https://g
 
 Run with default options.
 ```bash
-fuzzstark tests/flags.cairo
+tayt tests/flags.cairo
 ```
 When starting you will see the properties to be checked and the external functions used to generate a sequence of transactions.
 ```
@@ -42,7 +42,7 @@ Call sequence:
 
 The full help menu is:
 ```
-usage: fuzzstark [-h] [--seq-len SEQ_LEN]
+usage: tayt [-h] [--seq-len SEQ_LEN]
                  [--blacklist-function BLACKLIST_FUNCTION [BLACKLIST_FUNCTION ...]]
                  [--psender PSENDER] [--sender SENDER [SENDER ...]]
                  [--cairo-path CAIRO_PATH [CAIRO_PATH ...]] [--coverage]

@@ -3,7 +3,7 @@ Main module
 """
 
 import asyncio
-import fuzzstark.fuzzer
+import tayt.fuzzer
 
 
 def main() -> None:
@@ -11,7 +11,7 @@ def main() -> None:
     Main
     """
 
-    asyncio.run(fuzzstark.fuzzer.main())
+    asyncio.run(tayt.fuzzer.main())
 
 
 if __name__ == "__main__":
