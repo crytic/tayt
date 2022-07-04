@@ -4,31 +4,19 @@ Module containig a FuzzerWorker
 
 from collections import namedtuple
 import logging
-from typing import TYPE_CHECKING, List, Optional, Tuple
-from starkware.starknet.testing.state import StarknetState
+from typing import List, Optional, Tuple
 from starkware.starkware_utils.error_handling import StarkException
-
-if TYPE_CHECKING:
-    from fuzzer import Fuzzer
+from tayt.workers.fuzzer_worker_base import FuzzerWorker, TxSequenceElement
 
 
-TxSequenceElement = namedtuple(
-    "TxSequenceElement",
-    ["sender", "function_name", "arguments", "entry_point_type", "nonce", "events_emitted"],
-)
 ViolatedProperty = namedtuple("ViolatedProperty", ["name", "events_emitted"])
 
+
 # pylint: disable=too-few-public-methods, protected-access
-class FuzzerWorker:
+class FuzzerWorkerProperty(FuzzerWorker):
     """
     Execute the transactions and check for possible violated properties
     """
-
-    def __init__(self, fuzzer: "Fuzzer", worker_index: int):
-        self.fuzzer = fuzzer
-        self.worker_index = worker_index
-        # State refresh every run
-        self.state: StarknetState = None
 
     async def fuzz(self) -> None:
         """

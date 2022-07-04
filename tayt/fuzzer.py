@@ -9,6 +9,7 @@ import argparse
 import logging
 import time
 import signal
+import re
 from typing import Dict, List, Set
 from starkware.starknet.compiler.compile import compile_starknet_files
 from starkware.starknet.services.api.contract_class import ContractClass
@@ -17,7 +18,9 @@ from starkware.starknet.testing.contract_utils import parse_arguments, StructMan
 from starkware.starkware_utils.error_handling import StarkException
 from tayt.generator import TxGenerator
 from tayt.hooking import hook
-from tayt.fuzzer_worker import FuzzerWorker
+from tayt.workers.fuzzer_worker_property import FuzzerWorkerProperty
+from tayt.workers.fuzzer_worker_exception import FuzzerWorkerException
+from tayt.workers.fuzzer_worker_base import FuzzerWorker
 
 ExternalFunction = namedtuple("ExternalFunction", ["name", "arguments_type", "type"])
 FuzzerConfig = namedtuple(
@@ -31,6 +34,7 @@ FuzzerConfig = namedtuple(
         "cairo_path",
         "coverage",
         "no_shrink",
+        "exception_mode",
     ],
 )
 
@@ -69,6 +73,7 @@ class Fuzzer:
             args.cairo_path,
             args.coverage,
             args.no_shrink,
+            args.exception_mode,
         )
         self.generator = TxGenerator(self)
         self.workers: List[FuzzerWorker] = []
@@ -77,6 +82,8 @@ class Fuzzer:
         # Read only functions that start with fuzz_ and return one felt variable
         # The functions return 1 if the property is not violated otherwise 0
         self.property_functions: List[str] = []
+        # List of exception messages when an assertion fails
+        self.assertion_exception: List[str] = []
         # List of contract functions that change contract state
         # These are the functions to create a sequence of transactions to test
         self.external_functions: List[ExternalFunction] = []
@@ -109,12 +116,17 @@ class Fuzzer:
             logging.error("No abi generated.")
             sys.exit(1)
 
-        fuz1 = FuzzerWorker(self, 1)
-        self.workers.append(fuz1)
+        if self.config.exception_mode:
+            self.workers.append(FuzzerWorkerException(self, 1))
+        else:
+            self.workers.append(FuzzerWorkerProperty(self, 1))
+
         await self.workers[0].fuzz()
 
-        if len(self.property_functions) == 0:
+        if not self.config.exception_mode and len(self.property_functions) == 0:
             logging.info("All properties have been violated")
+        elif len(self.assertion_exception) == 0:
+            logging.info("All assertion exception have been violated")
 
         self.output_coverage()
 
@@ -145,34 +157,14 @@ class Fuzzer:
             )
             sys.exit(1)
 
-        for item in self.contract_class.abi:
-            if item["name"].startswith("fuzz_") and item["type"] == "function":
-                if (
-                    len(item["inputs"]) == 0
-                    and item.get("stateMutability") == "view"
-                    and len(item["outputs"]) == 1
-                    and item["outputs"][0]["type"] == "felt"
-                ):
-                    self.property_functions.append(item["name"])
-                else:
-                    logging.warning(
-                        f"Function {item['name']} starts with fuzz_ but doesn't respect the criteria. It won't be used as a property."
-                    )
-            elif (
-                item.get("stateMutability") is None
-                and item["name"] not in self.config.blacklist_function
-                and item["type"] in ("function", "l1_handler")
-            ):
-                _, cairoTypes = parse_arguments(item["inputs"])
-                self.external_functions.append(
-                    ExternalFunction(item["name"], cairoTypes, item["type"])
-                )
+        self._get_property_and_external_functions()
 
-        assert len(self.external_functions) > 0
-
-        logging.info("Fuzzing the following properties:")
-        for property_function in self.property_functions:
-            logging.info(f"\t{property_function}")
+        if not self.config.exception_mode:
+            logging.info("Fuzzing the following properties:")
+            for property_function in self.property_functions:
+                logging.info(f"\t{property_function}")
+        else:
+            self._get_assertion_exceptions()
 
         logging.info("External functions:")
         for external_function in self.external_functions:
@@ -228,6 +220,57 @@ class Fuzzer:
         self.output_coverage()
         sys.exit(1)
 
+    def _get_property_and_external_functions(self) -> None:
+        for item in self.contract_class.abi:
+            if (
+                not self.config.exception_mode
+                and item["name"].startswith("fuzz_")
+                and item["type"] == "function"
+            ):
+                if (
+                    len(item["inputs"]) == 0
+                    and item.get("stateMutability") == "view"
+                    and len(item["outputs"]) == 1
+                    and item["outputs"][0]["type"] == "felt"
+                ):
+                    self.property_functions.append(item["name"])
+                else:
+                    logging.warning(
+                        f"Function {item['name']} starts with fuzz_ but doesn't respect the criteria. It won't be used as a property."
+                    )
+            elif (
+                item.get("stateMutability") is None
+                and item["name"] not in self.config.blacklist_function
+                and item["type"] in ("function", "l1_handler")
+            ):
+                _, cairoTypes = parse_arguments(item["inputs"])
+                self.external_functions.append(
+                    ExternalFunction(item["name"], cairoTypes, item["type"])
+                )
+
+        assert len(self.external_functions) > 0
+
+    def _get_assertion_exceptions(self) -> None:
+        # We get all the possibe AssertionException messages
+        logging.info("Fuzzing the following assertion exceptions:")
+        for hints in self.contract_class.program.hints.values():
+            # pylint: disable=anomalous-backslash-in-string
+            exceptions_hints = [
+                re.findall('raise AssertionException\([\s"a-zA-Z0-9{}\.]*\)', i.code) for i in hints
+            ]
+            for exceptions_hint in exceptions_hints:
+                for exception in exceptions_hint:
+                    start_message = exception.find('"')
+                    start_variable = exception.find("{")
+                    if start_message != -1 and start_variable != -1:
+                        message = exception[start_message + 1 : start_variable]
+                        self.assertion_exception.append(message)
+                        logging.info(f"\t{message}")
+                    else:
+                        message = exception[start_message + 1 : -2]
+                        self.assertion_exception.append(message)
+                        logging.info(f"\t{message}")
+
 
 async def main() -> None:
     """
@@ -273,6 +316,8 @@ async def main() -> None:
     parser.add_argument(
         "--no-shrink", action="store_true", help="Avoid shrinking failing sequences."
     )
+    parser.add_argument("--exception-mode", action="store_true", help="Enable exception mode.")
+
     args = parser.parse_args()
 
     fuzzer = Fuzzer(args)
