@@ -74,7 +74,7 @@ class Fuzzer:
         self.workers: List[FuzzerWorker] = []
         self.state: StarknetState = None
         # List of contract functions name that represent properties to be tested
-        # Read only functions that start with fuzz_ and return one felt variable
+        # Read only functions that start with tayt_ and return one felt variable
         # The functions return 1 if the property is not violated otherwise 0
         self.property_functions: List[str] = []
         # List of contract functions that change contract state
@@ -146,7 +146,7 @@ class Fuzzer:
             sys.exit(1)
 
         for item in self.contract_class.abi:
-            if item["name"].startswith("fuzz_") and item["type"] == "function":
+            if item["name"].startswith("tayt_") and item["type"] == "function":
                 if (
                     len(item["inputs"]) == 0
                     and item.get("stateMutability") == "view"
@@ -156,7 +156,7 @@ class Fuzzer:
                     self.property_functions.append(item["name"])
                 else:
                     logging.warning(
-                        f"Function {item['name']} starts with fuzz_ but doesn't respect the criteria. It won't be used as a property."
+                        f"Function {item['name']} starts with tayt_ but doesn't respect the criteria. It won't be used as a property."
                     )
             elif (
                 item.get("stateMutability") is None

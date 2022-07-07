@@ -25,14 +25,14 @@ tayt tests/flags.cairo
 When starting you will see the properties to be checked and the external functions used to generate a sequence of transactions.
 ```
 Fuzzing the following properties:
-	fuzz_flag1
+	tayt_flag1
 External functions:
 	set0
 	set1
 ```
 Eventually if a property is violated a call sequence will be presented with the order of functions to be called, the respective arguments passed, the caller address, and the events emitted represented by a starting `E`.
 ```
-[!] fuzz_flag1 violated
+[!] tayt_flag1 violated
 Call sequence:
 	set0[0] from 1
 	 E set_flag0[0]
@@ -75,11 +75,11 @@ optional arguments:
 
 ### Writing invariants
 
-Invariants are StarkNet view functions with names that begin with `fuzz_`, have no arguments, and return a felt. An invariant is considered failed when it returns 0.
+Invariants are StarkNet view functions with names that begin with `tayt_`, have no arguments, and return a felt. An invariant is considered failed when it returns 0.
 
 ```cairo
 @view
-func fuzz_flag{
+func tayt_flag{
         range_check_ptr,
         syscall_ptr: felt*,
         pedersen_ptr: HashBuiltin*

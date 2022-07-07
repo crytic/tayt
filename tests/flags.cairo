@@ -61,7 +61,7 @@ end
 
 
 @view
-func fuzz_flag1{
+func tayt_flag1{
         range_check_ptr,
         syscall_ptr: felt*,
         pedersen_ptr: HashBuiltin*
