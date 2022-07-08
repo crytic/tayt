@@ -78,7 +78,8 @@ class FuzzerWorker:
                 0,
             )
 
-            self.fuzzer.coverage.update(call_info.pc)
+            self.fuzzer.coverage[self.fuzzer.deployed_contract_address].update(call_info.pc)
+            self.fuzzer.get_coverage_internal_calls(call_info.internal_calls)
 
             # Property violated
             if call_info.retdata == [0]:
@@ -124,7 +125,10 @@ class FuzzerWorker:
                     nonce=nonce,
                 )
 
-                self.fuzzer.coverage.update(execution_info.call_info.pc)
+                self.fuzzer.coverage[self.fuzzer.deployed_contract_address].update(
+                    execution_info.call_info.pc
+                )
+                self.fuzzer.get_coverage_internal_calls(execution_info.call_info.internal_calls)
 
                 transactions.append(
                     TxSequenceElement(
