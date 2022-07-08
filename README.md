@@ -42,12 +42,10 @@ Call sequence:
 
 The full help menu is:
 ```
-usage: tayt [-h] [--seq-len SEQ_LEN]
-                 [--blacklist-function BLACKLIST_FUNCTION [BLACKLIST_FUNCTION ...]]
-                 [--psender PSENDER] [--sender SENDER [SENDER ...]]
-                 [--cairo-path CAIRO_PATH [CAIRO_PATH ...]] [--coverage]
-                 [--no-shrink]
-                 filename
+usage: tayt [-h] [--seq-len SEQ_LEN] [--blacklist-function BLACKLIST_FUNCTION [BLACKLIST_FUNCTION ...]]
+            [--psender PSENDER] [--sender SENDER [SENDER ...]] [--cairo-path CAIRO_PATH [CAIRO_PATH ...]]
+            [--coverage] [--no-shrink] [--get-class-hash] [--declare DECLARE [DECLARE ...]]
+            filename
 
 StarkNet smart contract fuzzer.
 
@@ -56,21 +54,20 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
-  --seq-len SEQ_LEN     Number of transactions to generate during testing.
-                        (default: 10)
+  --seq-len SEQ_LEN     Number of transactions to generate during testing. (default: 10)
   --blacklist-function BLACKLIST_FUNCTION [BLACKLIST_FUNCTION ...]
-                        Function name (space separated) to blacklist from
-                        execution.
-  --psender PSENDER     Address of the sender for property transactions.
-                        (default: 1)
+                        Function name (space separated) to blacklist from execution.
+  --psender PSENDER     Address of the sender for property transactions. (default: 1)
   --sender SENDER [SENDER ...]
-                        Addresses (space separated) to use for the
-                        transactions sent during testing. (default: [0, 1, 2])
+                        Addresses (space separated) to use for the transactions sent during testing.
+                        (default: [0, 1, 2])
   --cairo-path CAIRO_PATH [CAIRO_PATH ...]
-                        A list of directories, separated by space to resolve
-                        import paths.
+                        A list of directories, separated by space to resolve import paths.
   --coverage            Output a coverage file.
   --no-shrink           Avoid shrinking failing sequences.
+  --get-class-hash      Get the class hash to use with a deploy function.
+  --declare DECLARE [DECLARE ...]
+                        A list of contracts that will be declared.
 ```
 
 ### Writing invariants
@@ -93,6 +90,25 @@ end
 ```
 
 If the flag storage variable is set to 1 the invariant will fail.
+
+### How to test a contract that deploys other contracts
+
+We will use `test/deploy.cairo` as an example of a contract that deploys other contracts.
+First we have to get the class hash of the contracts we want to deploy:
+
+In our case we will deploy `test/flags.cairo`.
+```bash
+tayt --get-class-hash tests/flags.cairo
+```
+We will get the class hash to use in the [`deploy`](https://starknet.io/docs/hello_starknet/deploying_from_contracts.html#the-deploy-system-call) function.
+```
+Class hash for tests/flags.cairo
+2024779828085525422431444182955849544076259995530386260630136607064428821244
+```
+Finally we can test `deploy.cairo`, the `--declare` option takes a list of contracts to declare in the fuzzing state.
+```
+tayt tests/deploy.cairo --declare tests/flags.cairo
+```
 
 ### Coverage
 

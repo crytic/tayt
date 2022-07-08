@@ -142,7 +142,7 @@ class TxGenerator:
             # We can have specific input generation strategies for known struct
             # e.g. Uint256
             struct_name = arg_type.scope.path[-1]
-            contract_struct = self.fuzzer.struct_manager.get_struct_definition(struct_name)
+            contract_struct = self.fuzzer.struct_definition[struct_name]
             for m in contract_struct.members.values():
                 self._generate_value(m.cairo_type, calldata)
 

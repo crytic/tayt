@@ -12,9 +12,16 @@ import signal
 from typing import Dict, List, Set
 from starkware.starknet.compiler.compile import compile_starknet_files
 from starkware.starknet.services.api.contract_class import ContractClass
+from starkware.starknet.public.abi import get_selector_from_name, AbiType
+from starkware.starknet.public.abi_structs import struct_definition_from_abi_entry
+from starkware.cairo.lang.compiler.identifier_definition import StructDefinition
 from starkware.starknet.testing.state import StarknetState
-from starkware.starknet.testing.contract_utils import parse_arguments, StructManager, EventManager
+from starkware.starknet.testing.contract_utils import (
+    parse_arguments,
+    get_contract_class,
+)
 from starkware.starkware_utils.error_handling import StarkException
+from starkware.starknet.core.os.class_hash import compute_class_hash
 from tayt.generator import TxGenerator
 from tayt.hooking import hook
 from tayt.fuzzer_worker import FuzzerWorker
@@ -31,6 +38,7 @@ FuzzerConfig = namedtuple(
         "cairo_path",
         "coverage",
         "no_shrink",
+        "declare",
     ],
 )
 
@@ -55,6 +63,18 @@ class Fuzzer:
         if not os.path.isabs(filename):
             filename = os.path.join(os.getcwd(), filename)
 
+        if args.get_class_hash:
+            contract_class = get_contract_class(source=filename, cairo_path=args.cairo_path)
+            logging.info(f"Class hash for {args.filename}\n{compute_class_hash(contract_class)}")
+            sys.exit(1)
+
+        declare_contracts = []
+        for contract in args.declare:
+            if not os.path.isabs(contract):
+                declare_contracts.append(os.path.join(os.getcwd(), contract))
+                continue
+            declare_contracts.append(contract)
+
         # We add the constructor, and fallback functions as blacklist
         # For now we don't fuzz fallback functions
         blacklist_function = set(
@@ -69,6 +89,7 @@ class Fuzzer:
             args.cairo_path,
             args.coverage,
             args.no_shrink,
+            declare_contracts,
         )
         self.generator = TxGenerator(self)
         self.workers: List[FuzzerWorker] = []
@@ -82,9 +103,8 @@ class Fuzzer:
         self.external_functions: List[ExternalFunction] = []
         self.deployed_contract_address: int
         self.contract_class: ContractClass
-        # TODO we could avoid these two helper class and do it manually
-        self.struct_manager: StructManager = None
-        self.event_manager: EventManager = None
+        self.struct_definition: Dict[str, StructDefinition] = {}
+        self.event_selector_to_name: Dict[int, str] = {}
         # For now we only keep track of the PCs executed
         self.coverage: Set[int] = set()
 
@@ -130,9 +150,13 @@ class Fuzzer:
                     sys.exit(1)
                 break
 
-        self.struct_manager = StructManager(self.contract_class.abi)
-        self.event_manager = EventManager(self.contract_class.abi)
+        self._get_structs_and_events(self.contract_class.abi)
         self.state = await StarknetState.empty()
+        # Declare the contracts so that they can be used e.g. in a deploy
+        for contract in self.config.declare:
+            contract_class = get_contract_class(source=contract, cairo_path=self.config.cairo_path)
+            await self.state.declare(contract_class)
+            self._get_structs_and_events(contract_class.abi)
 
         try:
             deployed_contract_address, _ = await self.state.deploy(
@@ -228,6 +252,17 @@ class Fuzzer:
         self.output_coverage()
         sys.exit(1)
 
+    def _get_structs_and_events(self, abi: AbiType) -> None:
+        for abi_entry in abi:
+            if abi_entry["type"] == "event":
+                self.event_selector_to_name[get_selector_from_name(abi_entry["name"])] = abi_entry[
+                    "name"
+                ]
+            elif abi_entry["type"] == "struct":
+                self.struct_definition[abi_entry["name"]] = struct_definition_from_abi_entry(
+                    abi_entry
+                )
+
 
 async def main() -> None:
     """
@@ -272,6 +307,18 @@ async def main() -> None:
     parser.add_argument("--coverage", action="store_true", help="Output a coverage file.")
     parser.add_argument(
         "--no-shrink", action="store_true", help="Avoid shrinking failing sequences."
+    )
+    parser.add_argument(
+        "--get-class-hash",
+        action="store_true",
+        help="Get the class hash to use with a deploy function.",
+    )
+    parser.add_argument(
+        "--declare",
+        type=str,
+        help="A list of contracts that will be declared.",
+        nargs="+",
+        default=[],
     )
     args = parser.parse_args()
 

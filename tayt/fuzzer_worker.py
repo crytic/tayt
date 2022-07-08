@@ -48,7 +48,7 @@ class FuzzerWorker:
                     logging.info(f"[!] {property_violated[0]} violated")
                     for event in property_violated[1]:
                         logging.info(
-                            f"\tE {self.fuzzer.event_manager._get_event_name(event.keys[0])}{event.data}"
+                            f"\tE {self.fuzzer.event_selector_to_name[event.keys[0]]}{event.data}"
                         )
                     logging.info("Call sequence:")
 
@@ -56,7 +56,7 @@ class FuzzerWorker:
                     logging.info(f"\t{t.function_name}{t.arguments} from {t.sender}")
                     for event in t.events_emitted:
                         logging.info(
-                            f"\t E {self.fuzzer.event_manager._get_event_name(event.keys[0])}{event.data}"
+                            f"\t E {self.fuzzer.event_selector_to_name[event.keys[0]]}{event.data}"
                         )
 
     async def _check_violated_property_tests(self) -> List[ViolatedProperty]:
